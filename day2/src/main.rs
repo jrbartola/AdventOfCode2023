@@ -3,7 +3,6 @@ mod sack;
 use common::filereader;
 use regex::Regex;
 use sack::Sack;
-use std::cmp::min;
 
 const REFERENCE_SACK: Sack = Sack::new(12, 13, 14);
 
@@ -22,7 +21,7 @@ fn parse_to_sacks(line: &String) -> (u8, Vec<Sack>) {
             game_number,
             sack_sequence
                 .split("; ")
-                .map(|sack_str| Sack::from(sack_str))
+                .map(|sack_str| Sack::from(sack_str).unwrap())
                 .collect(),
         );
     }

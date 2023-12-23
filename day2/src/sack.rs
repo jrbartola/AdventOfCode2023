@@ -1,4 +1,7 @@
 use std::cmp::{max, min};
+use std::io::{Error, ErrorKind};
+use std::num::IntErrorKind::InvalidDigit;
+use std::num::ParseIntError;
 
 #[derive(Debug)]
 pub struct Sack {
@@ -7,53 +10,56 @@ pub struct Sack {
     blue: i8,
 }
 
+#[derive(Debug)]
+pub enum SackError {
+    ParseError(ParseIntError),
+    InvalidColor(String),
+}
+
+impl From<ParseIntError> for SackError {
+    fn from(err: ParseIntError) -> Self {
+        SackError::ParseError(err)
+    }
+}
+
 impl Sack {
     pub const fn new(red: i8, green: i8, blue: i8) -> Self {
         Sack { red, green, blue }
     }
 
     pub fn get_min_sack(sacks: Vec<Sack>) -> Sack {
-        let mut min_sack = Sack::new(0, 0, 0);
-
-        sacks.iter().for_each(|sack| {
+        sacks.iter().fold(Sack::new(0, 0, 0), |mut min_sack, sack| {
             min_sack.red = max(min_sack.red, sack.red);
             min_sack.green = max(min_sack.green, sack.green);
             min_sack.blue = max(min_sack.blue, sack.blue);
-        });
-
-        min_sack
+            min_sack
+        })
     }
 
-    pub fn from(sack_str: &str) -> Self {
+    pub fn from(sack_str: &str) -> Result<Self, SackError> {
         let mut new_sack = Sack {
             red: 0,
             green: 0,
             blue: 0,
         };
 
-        let colors = sack_str.split(", ");
-
-        colors.for_each(|color_str| {
+        for color_str in sack_str.split(", ") {
             let mut splitted = color_str.split_whitespace();
 
-            let num_str = splitted.next().unwrap();
-            let color_str = splitted.next().unwrap();
+            let num_str = splitted.next().unwrap(); // In real code, handle this Option better
+            let color_str = splitted.next().unwrap(); // Same as above
+
+            let num = num_str.parse::<i8>()?;
 
             match color_str {
-                "red" => {
-                    new_sack.red = num_str.parse::<i8>().unwrap();
-                }
-                "green" => {
-                    new_sack.green = num_str.parse::<i8>().unwrap();
-                }
-                "blue" => {
-                    new_sack.blue = num_str.parse::<i8>().unwrap();
-                }
-                _ => panic!("Bad color {}", color_str),
+                "red" => new_sack.red = num,
+                "green" => new_sack.green = num,
+                "blue" => new_sack.blue = num,
+                _ => return Err(SackError::InvalidColor(color_str.to_string())),
             };
-        });
+        }
 
-        new_sack
+        Ok(new_sack)
     }
 
     pub fn is_valid(&self, sacks: &Vec<Sack>) -> bool {
