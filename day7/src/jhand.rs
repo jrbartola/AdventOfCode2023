@@ -112,8 +112,6 @@ fn compute_rank(cards: &[Card; 5]) -> u8 {
         num_jokers -= 1;
     }
 
-    println!("Before: {:?}, After: {:?}", cards, card_counts);
-
     match card_counts.values().max().unwrap() {
         5 => return 7,
         4 => return 6,
