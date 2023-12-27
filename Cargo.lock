@@ -68,6 +68,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "day10"
+version = "0.1.0"
+dependencies = [
+ "common",
+]
+
+[[package]]
 name = "day2"
 version = "0.1.0"
 dependencies = [
@@ -122,6 +129,13 @@ dependencies = [
  "common",
  "rand",
  "regex",
+]
+
+[[package]]
+name = "day9"
+version = "0.1.0"
+dependencies = [
+ "common",
 ]
 
 [[package]]
