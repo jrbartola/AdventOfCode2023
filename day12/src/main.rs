@@ -2,8 +2,6 @@ use common::filereader;
 use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::ParallelIterator;
 use rayon::ThreadPoolBuilder;
-use std::cmp::max;
-use std::ptr::read_unaligned;
 use std::sync::Mutex;
 
 fn is_valid_line(line: &[char], requirements: &Vec<u32>) -> bool {
@@ -51,11 +49,78 @@ fn is_valid_line(line: &[char], requirements: &Vec<u32>) -> bool {
         || (req_idx + 1 == requirements.len() && curr_str.len() == requirements[req_idx] as usize)
 }
 
-fn get_combos(line: String, requirements: &Vec<u32>, line_index: usize) -> u32 {
-    // if rand::thread_rng().gen_range(0..10000000) < 2 {
-    //     println!("{line}");
-    // }
+fn get_combos_optimized(
+    line: &Vec<char>,
+    requirements: &Vec<u32>,
+    line_index: usize,
+    req_index: usize,
+    curr_req_size: usize,
+) -> u32 {
+    if line_index >= line.len() {
+        let is_valid = req_index == requirements.len()
+            || req_index + 1 == requirements.len()
+                && curr_req_size == requirements[req_index] as usize;
 
+        return if is_valid { 1 } else { 0 };
+    }
+
+    if req_index >= requirements.len() {
+        let curr_char = line[line_index];
+        return match curr_char {
+            '.' | '?' => get_combos_optimized(line, requirements, line_index + 1, req_index, 0),
+            '#' => 0,
+            other => panic!("Invalid character in string {other}"),
+        };
+    }
+
+    let curr_char = line[line_index];
+    let curr_requirement = requirements[req_index];
+
+    let handle_fixed_case = || {
+        if curr_req_size > 0 {
+            if (curr_req_size as u32) != curr_requirement {
+                return 0;
+            }
+            get_combos_optimized(line, requirements, line_index + 1, req_index + 1, 0)
+        } else {
+            get_combos_optimized(line, requirements, line_index + 1, req_index, curr_req_size)
+        }
+    };
+
+    match curr_char {
+        '.' => handle_fixed_case(),
+        '?' => {
+            // First, check if placing a broken sprocket is valid. If it is, add it to the results
+            if (curr_req_size as u32) < curr_requirement {
+                return get_combos_optimized(
+                    line,
+                    requirements,
+                    line_index + 1,
+                    req_index,
+                    curr_req_size + 1,
+                ) + handle_fixed_case();
+            } else {
+                handle_fixed_case()
+            }
+        }
+        '#' => {
+            if (curr_req_size as u32) >= curr_requirement {
+                return 0;
+            }
+
+            get_combos_optimized(
+                line,
+                requirements,
+                line_index + 1,
+                req_index,
+                curr_req_size + 1,
+            )
+        }
+        other => panic!("Invalid character in string {other}"),
+    }
+}
+
+fn get_combos(line: String, requirements: &Vec<u32>, line_index: usize) -> u32 {
     if line_index >= line.len() {
         return if is_valid_line(&line.chars().collect::<Vec<char>>(), requirements) {
             1
@@ -131,7 +196,7 @@ fn solve(lines: Vec<String>) -> u32 {
         .enumerate()
         .map(|(idx, (line, requirements))| {
             println!("Running {line}: {idx}");
-            get_combos(line, &requirements, 0)
+            get_combos_optimized(&line.chars().collect(), &requirements, 0, 0, 0)
         })
         .sum()
 }
@@ -161,27 +226,26 @@ fn solve2(lines: Vec<String>) -> u128 {
         let local_sum: u128 = mapped_lines
             .par_iter()
             .map(|(idx, (line, requirements))| {
-                let first_combos = get_combos(line.to_string(), &requirements, 0);
-                let second_combos = get_combos(format!("?{line}"), &requirements, 0);
-                let third_comboas = get_combos(format!("{line}?"), &requirements, 0);
+                let first_combos =
+                    get_combos_optimized(&line.chars().collect(), &requirements, 0, 0, 0);
+                let second_combos = get_combos_optimized(
+                    &format!("{line}?{line}").chars().collect(),
+                    &requirements
+                        .iter()
+                        .cycle()
+                        .take(requirements.len() * 2)
+                        .map(|v| *v)
+                        .collect(),
+                    0,
+                    0,
+                    0,
+                );
 
-                let multiplier = if line.ends_with("#") {
-                    let multi_combos = get_combos(
-                        format!("{line}?{line}"),
-                        &requirements
-                            .iter()
-                            .cycle()
-                            .take(requirements.len() * 2)
-                            .map(|v| *v)
-                            .collect(),
-                        0,
-                    );
-                    multi_combos / first_combos
-                } else {
-                    max(second_combos, third_comboas)
-                };
+                let multiplier = second_combos / first_combos;
 
-                println!("Running {line}: {idx}. Multiplier: {multiplier}");
+                println!("Running {}: multiplier={multiplier}", line);
+
+                // second_combos as u128
 
                 (first_combos as u128) * ((multiplier as u128).pow(4))
             })
