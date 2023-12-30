@@ -1,22 +1,10 @@
 use common::filereader;
+use common::formatting::format_grid;
 
 #[derive(Debug, PartialEq)]
 pub enum MirrorKind {
     Row(usize),
     Col(usize),
-}
-
-fn format_grid(grid: &Vec<Vec<char>>) -> String {
-    let mut grid_str = String::with_capacity(grid.len() & grid[0].len());
-
-    for i in 0..grid.len() {
-        for j in 0..grid[i].len() {
-            grid_str.push(grid[i][j]);
-        }
-        grid_str.push('\n')
-    }
-
-    grid_str
 }
 
 fn parse_grids(lines: Vec<String>) -> Vec<Vec<Vec<char>>> {
