@@ -1,7 +1,7 @@
 use common::filereader;
 use common::formatting::format_grid;
-use std::cmp::{max, min, Reverse};
-use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
+use std::cmp::{min, Reverse};
+use std::collections::{BinaryHeap, HashMap};
 
 #[derive(Eq, PartialEq, Clone, Hash, Debug, Copy, Ord, PartialOrd)]
 enum Direction {
@@ -35,7 +35,6 @@ impl Direction {
 struct PQueueCoord {
     coords: (usize, usize),
     direction: Direction,
-    path_len: usize,
 }
 
 fn get_coord_in_direction(
@@ -81,30 +80,16 @@ fn get_neighbors(
     grid: &Vec<Vec<u8>>,
     coords: (usize, usize),
     direction: Direction,
-    path_len: usize,
 ) -> Vec<PQueueCoord> {
     let mut neighbors = Vec::new();
 
-    let front_coord = get_coord_in_direction(grid, coords, direction);
     let left_coord = get_coord_in_direction(grid, coords, direction.left());
     let right_coord = get_coord_in_direction(grid, coords, direction.right());
-
-    // Try front only if the current path is less than 3
-    if let Some(front_coord) = front_coord {
-        if path_len < 3 {
-            neighbors.push(PQueueCoord {
-                coords: front_coord,
-                direction,
-                path_len: path_len + 1,
-            })
-        }
-    }
 
     if let Some(left_coord) = left_coord {
         neighbors.push(PQueueCoord {
             coords: left_coord,
             direction: direction.left(),
-            path_len: 1,
         })
     }
 
@@ -112,7 +97,6 @@ fn get_neighbors(
         neighbors.push(PQueueCoord {
             coords: right_coord,
             direction: direction.right(),
-            path_len: 1,
         })
     }
 
@@ -130,7 +114,6 @@ fn dijkstras(grid: &Vec<Vec<u8>>, start: (usize, usize), goal: (usize, usize)) -
         PQueueCoord {
             coords: start,
             direction: Direction::Right,
-            path_len: 0,
         },
     )));
 
@@ -139,7 +122,6 @@ fn dijkstras(grid: &Vec<Vec<u8>>, start: (usize, usize), goal: (usize, usize)) -
         PQueueCoord {
             coords: (r, c),
             direction,
-            path_len,
         },
     ))) = priority_queue.pop()
     {
@@ -149,34 +131,43 @@ fn dijkstras(grid: &Vec<Vec<u8>>, start: (usize, usize), goal: (usize, usize)) -
             continue;
         }
 
-        let neighbors = get_neighbors(grid, (r, c), direction, path_len);
+        let neighbors = get_neighbors(grid, (r, c), direction);
 
         for PQueueCoord {
-            coords: (neighbor_row, neighbor_col),
             direction: neighbor_direction,
-            path_len,
+            ..
         } in neighbors
         {
-            let curr_dist = dist + grid[neighbor_row][neighbor_col] as u32;
-            if curr_dist
-                < *distances
-                    .get(&(neighbor_row, neighbor_col, neighbor_direction))
-                    .unwrap_or(&u32::MAX)
-            {
-                distances.insert((neighbor_row, neighbor_col, neighbor_direction), curr_dist);
-                predecessors.insert(
-                    (neighbor_row, neighbor_col, neighbor_direction),
-                    (r, c, direction),
+            let mut next_dist = dist;
+            let mut next_coord = get_coord_in_direction(grid, (r, c), neighbor_direction);
+
+            for _ in 0..3 {
+                if next_coord.is_none() {
+                    break;
+                }
+
+                let (next_row, next_col) = (
+                    next_coord.as_ref().unwrap().0,
+                    next_coord.as_ref().unwrap().1,
                 );
-                // println!("Pushing ({neighbor_row}, {neighbor_col}) with cost of {curr_dist}");
-                priority_queue.push(Reverse((
-                    curr_dist,
-                    PQueueCoord {
-                        coords: (neighbor_row, neighbor_col),
-                        direction: neighbor_direction,
-                        path_len,
-                    },
-                )))
+                next_coord = get_coord_in_direction(grid, next_coord.unwrap(), neighbor_direction);
+                next_dist += grid[next_row][next_col] as u32;
+                if next_dist
+                    < *distances
+                        .get(&(next_row, next_col, neighbor_direction))
+                        .unwrap_or(&u32::MAX)
+                {
+                    distances.insert((next_row, next_col, neighbor_direction), next_dist);
+                    predecessors
+                        .insert((next_row, next_col, neighbor_direction), (r, c, direction));
+                    priority_queue.push(Reverse((
+                        next_dist,
+                        PQueueCoord {
+                            coords: (next_row, next_col),
+                            direction: neighbor_direction,
+                        },
+                    )))
+                }
             }
         }
     }
@@ -199,7 +190,6 @@ fn dijkstras(grid: &Vec<Vec<u8>>, start: (usize, usize), goal: (usize, usize)) -
         curr = (r, c, dir);
     }
 
-    // println!("{:?}", distances);
     println!("{}", format_grid(&cloned_grid));
 
     let maybe_right_dist = distances.get(&(goal.0, goal.1, Direction::Right));
