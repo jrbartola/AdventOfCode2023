@@ -159,13 +159,22 @@ fn dijkstras(grid: &Vec<Vec<u8>>, start: (usize, usize), goal: (usize, usize)) -
 
         for PQueueCoord {
             coords: (neighbor_row, neighbor_col),
-            ..
+            direction,
+            path_len,
         } in neighbors
         {
-            let curr_dist = *distances.get(&(r, c)).unwrap() + grid[neighbor_row][neighbor_col];
+            let curr_dist = dist + grid[neighbor_row][neighbor_col] as u32;
             if curr_dist < *distances.get(&(neighbor_row, neighbor_col)).unwrap() {
                 distances.insert((neighbor_row, neighbor_col), curr_dist);
                 predecessors.insert((neighbor_row, neighbor_col), (r, c));
+                priority_queue.push(Reverse((
+                    curr_dist,
+                    PQueueCoord {
+                        coords: (neighbor_row, neighbor_col),
+                        direction,
+                        path_len,
+                    },
+                )))
             }
         }
     }
@@ -183,7 +192,6 @@ fn solve(lines: Vec<String>) -> u32 {
         })
         .collect();
 
-    // get_least_heat_loss(&grid, (0, 0), (grid.len() - 1, grid[0].len() - 1))
     dijkstras(&grid, (0, 0), (grid.len() - 1, grid[0].len() - 1))
 }
 
