@@ -103,7 +103,13 @@ fn get_neighbors(
     neighbors
 }
 
-fn dijkstras(grid: &Vec<Vec<u8>>, start: (usize, usize), goal: (usize, usize)) -> u32 {
+fn dijkstras(
+    grid: &Vec<Vec<u8>>,
+    start: (usize, usize),
+    goal: (usize, usize),
+    min_steps: usize,
+    max_steps: usize,
+) -> u32 {
     let mut distances: HashMap<(usize, usize, Direction), u32> = HashMap::new();
     let mut predecessors: HashMap<(usize, usize, Direction), (usize, usize, Direction)> =
         HashMap::new();
@@ -141,7 +147,7 @@ fn dijkstras(grid: &Vec<Vec<u8>>, start: (usize, usize), goal: (usize, usize)) -
             let mut next_dist = dist;
             let mut next_coord = get_coord_in_direction(grid, (r, c), neighbor_direction);
 
-            for _ in 0..3 {
+            for i in 1..=max_steps {
                 if next_coord.is_none() {
                     break;
                 }
@@ -152,6 +158,11 @@ fn dijkstras(grid: &Vec<Vec<u8>>, start: (usize, usize), goal: (usize, usize)) -
                 );
                 next_coord = get_coord_in_direction(grid, next_coord.unwrap(), neighbor_direction);
                 next_dist += grid[next_row][next_col] as u32;
+
+                if i < min_steps {
+                    continue;
+                }
+
                 if next_dist
                     < *distances
                         .get(&(next_row, next_col, neighbor_direction))
@@ -206,64 +217,6 @@ fn dijkstras(grid: &Vec<Vec<u8>>, start: (usize, usize), goal: (usize, usize)) -
     unreachable!()
 }
 
-fn dijkstra(grid: &[&[u8]], minstep: isize, maxstep: isize) -> i64 {
-    let mut dists = HashMap::new();
-    let mut predecessors: HashMap<(usize, usize, (isize, isize)), (usize, usize, (isize, isize))> =
-        HashMap::new();
-    let mut q = BinaryHeap::from_iter([(0, (0, 0, (0, 0)))]);
-    while let Some((cost, (r, c, d))) = q.pop() {
-        if (r, c) == (grid.len() - 1, grid[0].len() - 1) {
-            // println!("{:?}", dists);
-            let goal = (grid.len() - 1, grid[0].len() - 1);
-            let mut curr = (goal.0, goal.1, (0, 1));
-            let mut cloned_grid: Vec<Vec<char>> = grid
-                .clone()
-                .iter()
-                .map(|r| r.iter().map(|&c| c as char).collect())
-                .collect();
-
-            cloned_grid[goal.0][goal.1] = '.';
-
-            while let Some(&(r, c, dir)) = predecessors.get(&curr) {
-                println!("Predecessor of ({}, {}) is ({}, {})", curr.0, curr.1, r, c);
-                cloned_grid[r][c] = '.';
-                curr = (r, c, dir);
-            }
-
-            println!("{}", format_grid(&cloned_grid));
-            return -cost;
-        }
-        if dists.get(&(r, c, d)).is_some_and(|&c| -cost > c) {
-            continue;
-        }
-        for (dr, dc) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
-            if d == (dr, dc) || d == (-dr, -dc) {
-                continue;
-            }
-            let mut next_cost = -cost;
-            for dist in 1..=maxstep {
-                let rr = (r as isize + dr * dist) as usize;
-                let cc = (c as isize + dc * dist) as usize;
-                if rr >= grid.len() || cc >= grid[0].len() {
-                    break;
-                }
-                next_cost += (grid[rr][cc] - b'0') as i64;
-                if dist < minstep {
-                    continue;
-                }
-                let key = (rr, cc, (dr, dc));
-                if next_cost < *dists.get(&key).unwrap_or(&i64::MAX) {
-                    // println!("Pushing ({rr}, {cc}) with cost of {next_cost}");
-                    dists.insert(key, next_cost);
-                    predecessors.insert(key, (r, c, d));
-                    q.push((-next_cost, key));
-                }
-            }
-        }
-    }
-    unreachable!()
-}
-
 fn solve(lines: Vec<String>) -> u32 {
     let grid: Vec<Vec<u8>> = lines
         .iter()
@@ -274,15 +227,7 @@ fn solve(lines: Vec<String>) -> u32 {
         })
         .collect();
 
-    let grid_bytes: &[&[u8]] = &lines.iter().map(|s| str::as_bytes(s)).collect::<Vec<_>>();
-
-    let expected = dijkstra(&grid_bytes, 1, 3);
-    println!("-----------------------------------");
-    let actual = dijkstras(&grid, (0, 0), (grid.len() - 1, grid[0].len() - 1));
-
-    println!("Expected: {}; Actual: {}", expected, actual);
-
-    actual
+    dijkstras(&grid, (0, 0), (grid.len() - 1, grid[0].len() - 1), 4, 10);
 }
 
 fn main() {
