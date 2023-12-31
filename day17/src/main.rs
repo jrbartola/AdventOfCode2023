@@ -2,7 +2,7 @@ use common::filereader;
 use std::cmp::{min, Reverse};
 use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
 
-#[derive(Eq, PartialEq, Clone, Hash, Debug, Copy)]
+#[derive(Eq, PartialEq, Clone, Hash, Debug, Copy, Ord, PartialOrd)]
 enum Direction {
     Up,
     Left,
@@ -30,15 +30,7 @@ impl Direction {
     }
 }
 
-#[derive(Debug)]
-struct CrucibleState {
-    coords: (usize, usize),
-    direction: Direction,
-    path_len: usize,
-    heat_loss: u32,
-}
-
-#[derive(Debug)]
+#[derive(Eq, PartialEq, Clone, Hash, Debug, Copy, Ord, PartialOrd)]
 struct PQueueCoord {
     coords: (usize, usize),
     direction: Direction,
@@ -55,7 +47,7 @@ fn get_coord_in_direction(
     match direction {
         Direction::Up => {
             if r > 0 {
-                Some((r - 1, 0))
+                Some((r - 1, c))
             } else {
                 None
             }
@@ -82,51 +74,6 @@ fn get_coord_in_direction(
             }
         }
     }
-}
-
-fn get_next_states(grid: &Vec<Vec<u8>>, state: CrucibleState) -> Vec<CrucibleState> {
-    // Capture Front, left, and right
-    let mut next_states = Vec::new();
-    let heat_loss_for_cell = grid[state.coords.0][state.coords.1];
-
-    let front_coord = get_coord_in_direction(grid, state.coords, state.direction);
-    let left_coord = get_coord_in_direction(grid, state.coords, state.direction.left());
-    let right_coord = get_coord_in_direction(grid, state.coords, state.direction.right());
-
-    // Try front only if the current path is less than 3
-    if let Some(front_coord) = front_coord {
-        if state.path_len < 3 {
-            next_states.push(CrucibleState {
-                coords: front_coord,
-                direction: state.direction.clone(),
-                path_len: state.path_len + 1,
-                heat_loss: state.heat_loss + (heat_loss_for_cell as u32),
-                // visited: update_visited(&state.visited, front_coord),
-            })
-        }
-    }
-
-    if let Some(left_coord) = left_coord {
-        next_states.push(CrucibleState {
-            coords: left_coord,
-            direction: state.direction.left(),
-            path_len: 0,
-            heat_loss: state.heat_loss + (heat_loss_for_cell as u32),
-            // visited: update_visited(&state.visited, left_coord),
-        })
-    }
-
-    if let Some(right_coord) = right_coord {
-        next_states.push(CrucibleState {
-            coords: right_coord,
-            direction: state.direction.right(),
-            path_len: 0,
-            heat_loss: state.heat_loss + (heat_loss_for_cell as u32),
-            // visited: update_visited(&state.visited, right_coord),
-        })
-    }
-
-    next_states
 }
 
 fn get_neighbors(
@@ -156,7 +103,7 @@ fn get_neighbors(
         neighbors.push(PQueueCoord {
             coords: left_coord,
             direction: direction.left(),
-            path_len: 0,
+            path_len: 1,
         })
     }
 
@@ -164,7 +111,7 @@ fn get_neighbors(
         neighbors.push(PQueueCoord {
             coords: right_coord,
             direction: direction.right(),
-            path_len: 0,
+            path_len: 1,
         })
     }
 
@@ -226,46 +173,6 @@ fn dijkstras(grid: &Vec<Vec<u8>>, start: (usize, usize), goal: (usize, usize)) -
     *distances.get(&goal).unwrap()
 }
 
-fn get_least_heat_loss(grid: &Vec<Vec<u8>>, start: (usize, usize), goal: (usize, usize)) -> u32 {
-    let mut visited: HashMap<(usize, usize), u32> = HashMap::new();
-    let mut queue: VecDeque<CrucibleState> = VecDeque::new();
-    let mut least_heat = u32::MAX;
-
-    queue.push_back(CrucibleState {
-        coords: start,
-        direction: Direction::Right,
-        path_len: 0,
-        heat_loss: 0,
-    });
-
-    while let Some(state) = queue.pop_front() {
-        if let Some(&heat) = visited.get(&(state.coords.0, state.coords.1)) {
-            if heat < state.heat_loss {
-                continue;
-            }
-        }
-
-        if state.coords == goal {
-            println!("least_heat: {}", least_heat);
-            least_heat = min(least_heat, state.heat_loss);
-        } else {
-            visited.insert((state.coords.0, state.coords.1), state.heat_loss);
-            let next_states = get_next_states(grid, state);
-            for state in next_states {
-                if let Some(&heat) = visited.get(&(state.coords.0, state.coords.1)) {
-                    if heat >= state.heat_loss {
-                        queue.push_back(state);
-                    }
-                } else {
-                    queue.push_back(state);
-                }
-            }
-        }
-    }
-
-    least_heat
-}
-
 fn solve(lines: Vec<String>) -> u32 {
     let grid: Vec<Vec<u8>> = lines
         .iter()
@@ -276,7 +183,8 @@ fn solve(lines: Vec<String>) -> u32 {
         })
         .collect();
 
-    get_least_heat_loss(&grid, (0, 0), (grid.len() - 1, grid[0].len() - 1))
+    // get_least_heat_loss(&grid, (0, 0), (grid.len() - 1, grid[0].len() - 1))
+    dijkstras(&grid, (0, 0), (grid.len() - 1, grid[0].len() - 1))
 }
 
 fn main() {
