@@ -1,8 +1,10 @@
 use common::filereader;
+use common::filewriter::write_file;
 use common::formatting::format_grid;
+use regex::Regex;
 use std::cmp::{max, min};
-use std::collections::{HashMap, VecDeque};
-use std::ops::Sub;
+use std::collections::{HashSet, VecDeque};
+use std::ops::Add;
 
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Copy, Clone)]
 enum Direction {
@@ -13,12 +15,22 @@ enum Direction {
 }
 
 impl Direction {
-    fn from(c: char) -> Self {
+    fn from_char(c: char) -> Self {
         match c {
             'U' => Direction::Up,
             'L' => Direction::Left,
             'D' => Direction::Down,
             'R' => Direction::Right,
+            _ => unreachable!(),
+        }
+    }
+
+    fn from_digit(d: u8) -> Self {
+        match d {
+            3 => Direction::Up,
+            2 => Direction::Left,
+            1 => Direction::Down,
+            0 => Direction::Right,
             _ => unreachable!(),
         }
     }
@@ -33,34 +45,75 @@ impl Direction {
     }
 }
 
-#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Copy, Clone)]
-struct Point(isize, isize);
+fn fill_bfs(grid: &mut Vec<Vec<char>>, start_coords: Vec<(usize, usize)>) {
+    let mut visited: HashSet<(usize, usize)> = HashSet::new();
+    let mut queue = VecDeque::new();
 
-impl Sub for Point {
-    type Output = Point;
+    queue.extend(start_coords);
 
-    fn sub(self, other: Point) -> Point {
-        Point(self.0 - other.0, self.1 - other.1)
+    while let Some((r, c)) = queue.pop_front() {
+        if visited.contains(&(r, c)) {
+            continue;
+        }
+
+        let curr_char = grid[r][c];
+
+        if curr_char == '.' {
+            grid[r][c] = 'X';
+        } else {
+            continue;
+        }
+
+        for (r_new, c_new) in get_neighbors(grid, (r, c)) {
+            if grid[r_new][c_new] != '#' && !visited.contains(&(r_new, c_new)) {
+                queue.push_back((r_new, c_new));
+            }
+        }
     }
 }
 
-fn adjust_vertex(a: Point, b: Point) -> (Point, Point) {
-    let (mut ax, mut ay) = (a.0, a.1);
-    let (mut bx, mut by) = (b.0, b.1);
+fn get_neighbors(grid: &Vec<Vec<char>>, coords: (usize, usize)) -> Vec<(usize, usize)> {
+    let (r, c) = coords;
+    // let cell = self.get_cell(coords.0, coords.1);
+    let mut neighbors = Vec::with_capacity(8);
 
-    if ax == bx {
-        // Vertical edge
-        by += if ay < by { 1 } else { -1 };
-    } else if ay == by {
-        // Horizontal edge
-        bx += if ax < bx { 1 } else { -1 };
+    if r > 0 {
+        // Top
+        neighbors.push((r - 1, c));
     }
 
-    (Point(ax, ay), Point(bx, by))
+    if c > 0 {
+        // Left
+        neighbors.push((r, c - 1));
+    }
+
+    if r < grid.len() - 1 {
+        // Bottom
+        neighbors.push((r + 1, c));
+    }
+
+    if c < grid[0].len() - 1 {
+        // Right
+        neighbors.push((r, c + 1));
+    }
+
+    neighbors
+}
+
+fn get_border_coords(grid: &Vec<Vec<char>>) -> Vec<(usize, usize)> {
+    let rows = grid.len();
+    let cols = grid[0].len();
+
+    (0..rows)
+        .map(|r| (r, 0))
+        .chain((0..rows).map(|r| (r, cols - 1)))
+        .chain((0..cols).map(|c| (0, c)))
+        .chain((0..cols).map(|c| (rows - 1, c)))
+        .collect()
 }
 
 fn determine_bounding_coords(
-    instructions: &Vec<(Direction, u8)>,
+    instructions: &Vec<(Direction, u64)>,
 ) -> ((usize, usize), impl Fn((isize, isize)) -> (usize, usize)) {
     let mut row: isize = 0;
     let mut col: isize = 0;
@@ -96,151 +149,27 @@ fn determine_bounding_coords(
     )
 }
 
-fn polygon_area(vertices: &[(usize, usize)]) -> f64 {
-    fn add_segment(
-        segments: &mut HashMap<isize, Vec<(isize, isize)>>,
-        key: isize,
-        start: isize,
-        end: isize,
-    ) {
-        let entry = segments.entry(key).or_insert_with(Vec::new);
-        entry.push((start.min(end), start.max(end)));
-    }
-
-    fn group_vertices(
-        polygon: &[Point],
-    ) -> (
-        HashMap<isize, Vec<(isize, isize)>>,
-        HashMap<isize, Vec<(isize, isize)>>,
-    ) {
-        let mut horizontal_segments = HashMap::new();
-        let mut vertical_segments = HashMap::new();
-
-        for i in 0..polygon.len() {
-            let p1 = polygon[i];
-            let p2 = polygon[(i + 1) % polygon.len()]; // Loop back to the start for the last segment
-
-            if p1.1 == p2.1 {
-                // Horizontal segment
-                add_segment(&mut horizontal_segments, p1.1, p1.0, p2.0);
-            } else if p1.0 == p2.0 {
-                // Vertical segment
-                add_segment(&mut vertical_segments, p1.0, p1.1, p2.1);
-            }
-        }
-
-        (horizontal_segments, vertical_segments)
-    }
-
-    fn count_vertices_in_polygon(polygon: &[Point]) -> usize {
-        fn merge_segments(segments: &mut Vec<(isize, isize)>) {
-            segments.sort_unstable_by(|a, b| a.0.cmp(&b.0));
-            let mut merged: Vec<(isize, isize)> = Vec::new();
-
-            for segment in segments.iter() {
-                if let Some(last) = merged.last_mut() {
-                    if segment.0 <= last.1 {
-                        last.1 = last.1.max(segment.1);
-                        continue;
-                    }
-                }
-                merged.push(*segment);
-            }
-
-            *segments = merged;
-        }
-
-        let (mut horizontal_segments, mut vertical_segments) = group_vertices(polygon);
-
-        let mut count = 0;
-        for segments in horizontal_segments.values_mut() {
-            merge_segments(segments);
-            count += segments
-                .iter()
-                .map(|&(start, end)| end - start + 1)
-                .sum::<isize>();
-        }
-        for segments in vertical_segments.values_mut() {
-            merge_segments(segments);
-            count += segments
-                .iter()
-                .map(|&(start, end)| end - start + 1)
-                .sum::<isize>();
-        }
-
-        // Adjust for corner points
-        let corner_points = horizontal_segments
-            .keys()
-            .flat_map(|&y| vertical_segments.keys().map(move |&x| Point(x, y)))
-            .collect::<Vec<_>>();
-        for corner in corner_points.iter() {
-            if polygon.contains(corner) {
-                count -= 1; // Subtract 1 for each corner point in the polygon
-            }
-        }
-
-        count as usize
-    }
-
-    count_vertices_in_polygon(
-        &vertices
-            .iter()
-            .map(|&(x, y)| Point(x as isize, y as isize))
-            .collect::<Vec<_>>(),
-    ) as f64
-
-    // lt mut adjusted_vertices = VecDeque::new();
-    // let mut next_delta = (0, 0);
-    //
-    // adjusted_vertices.push_back(Point(vertices[0].0 as isize, vertices[0].1 as isize));
-    //
-    // for i in 0..(vertices.len() - 1) {
-    //     let current = Point(
-    //         vertices[i].0 as isize + next_delta.0,
-    //         vertices[i].1 as isize + next_delta.1,
-    //     );
-    //     let next = Point(
-    //         vertices[(i + 1) % vertices.len()].0 as isize + next_delta.0,
-    //         vertices[(i + 1) % vertices.len()].1 as isize + next_delta.1,
-    //     );
-    //     let (adjusted_current, adjusted_next) = adjust_vertex(current, next);
-    //
-    //     next_delta = (
-    //         next_delta.0 + adjusted_next.0 - next.0,
-    //         next_delta.1 + adjusted_next.1 - next.1,
-    //     );
-    //
-    //     // println!(
-    //     //     "{i}: current: {:?}, next: {:?}, adjusted_current: {:?}, adjusted_next: {:?}",
-    //     //     current, next, adjusted_current, adjusted_next
-    //     // );
-    //     //
-    //     // // adjusted_vertices.push_back(adjusted_current);
-    //     adjusted_vertices.push_back(adjusted_next);
-    // }
-    //
-    // println!("adjusted: {:?}", adjusted_vertices);
-    //
-    // let mut area = 0.0;
-    // for i in 0..adjusted_vertices.len() {
-    //     let (x0, y0) = (adjusted_vertices[i].0, adjusted_vertices[i].1);
-    //     let (x1, y1) = (
-    //         adjusted_vertices[(i + 1) % adjusted_vertices.len()].0,
-    //         adjusted_vertices[(i + 1) % adjusted_vertices.len()].1,
-    //     );
-    //     area += (x0 * y1) as f64 - (y0 * x1) as f64;
-    // }
-    //
-    // area.abs() / 2.0
-}
-
-fn parse_line(line: String) -> (Direction, u8) {
+fn parse_line(line: String) -> (Direction, u64) {
     let splitted = line.split_whitespace().collect::<Vec<_>>();
 
     (
-        Direction::from(splitted[0].chars().find(|_| true).unwrap()),
-        splitted[1].parse::<u8>().unwrap(),
+        Direction::from_char(splitted[0].chars().find(|_| true).unwrap()),
+        splitted[1].parse::<u64>().unwrap(),
     )
+}
+
+fn parse_line_hex(line: String) -> (Direction, u64) {
+    let reg = Regex::new(r"\(#([a-z0-9]{5})(\d)\)").unwrap();
+    if let Some(caps) = reg.captures(line.as_str()) {
+        let distance_hex = caps.get(1).unwrap().as_str();
+        let direction = caps.get(2).unwrap().as_str().parse::<u8>().unwrap();
+        return (
+            Direction::from_digit(direction),
+            u64::from_str_radix(distance_hex, 16).unwrap(),
+        );
+    }
+
+    unreachable!()
 }
 
 fn solve(lines: Vec<String>) -> u32 {
@@ -269,21 +198,81 @@ fn solve(lines: Vec<String>) -> u32 {
         vertices.push(map_to_nonzero_coords((row, col)));
     }
 
-    println!("{}", format_grid(&terrain));
-    // println!(" {}", polygon_area(&[(0, 0), (0, 5), (1, 5), (1, 0)]));
-    println!(
-        " {}",
-        polygon_area(&[(0, 0), (0, 5), (3, 5), (3, 8), (5, 8), (5, 0)])
-    );
-    // vertices.reverse();
-    polygon_area(&vertices[..]) as u32
-    // 232
+    // println!("{}", format_grid(&terrain));
+
+    for coords in get_border_coords(&terrain) {
+        fill_bfs(&mut terrain, vec![coords]);
+    }
+
+    write_file(
+        "./day18/resources/output.txt",
+        format_grid(&terrain)
+            .split("\n")
+            .map(|s| s.to_owned())
+            .collect(),
+    )
+    .expect("Couldn't write to file for whatever reason");
+
+    (terrain.len() * terrain[0].len()) as u32
+        - terrain
+            .iter()
+            .flatten()
+            .fold(0, |acc, &c| acc + (if c == 'X' { 1 } else { 0 }))
+}
+
+fn solve2(lines: Vec<String>) -> u64 {
+    let instructions: Vec<_> = lines.into_iter().map(|line| parse_line_hex(line)).collect();
+
+    let ((max_row, max_col), map_to_nonzero_coords) = determine_bounding_coords(&instructions);
+    println!("rows: {}, cols: {}", max_row, max_col);
+    let mut terrain = vec![vec!['.'; max_col + 1]; max_row + 1];
+    let mut vertices = vec![(0, 0)];
+
+    let mut row = 0_isize;
+    let mut col = 0_isize;
+
+    println!("before instructions");
+    for (direction, steps) in instructions {
+        let (dir_row, dir_col) = direction.to_unit_coord();
+
+        for _ in 0..steps {
+            row += dir_row;
+            col += dir_col;
+
+            let (actual_row, actual_col) = map_to_nonzero_coords((row, col));
+
+            terrain[actual_row][actual_col] = '#';
+        }
+
+        vertices.push(map_to_nonzero_coords((row, col)));
+    }
+
+    println!("rows: {}, cols: {}", terrain.len(), terrain[0].len());
+
+    let border_coords = get_border_coords(&terrain);
+
+    fill_bfs(&mut terrain, border_coords);
+
+    // write_file(
+    //     "./day18/resources/output.txt",
+    //     format_grid(&terrain)
+    //         .split("\n")
+    //         .map(|s| s.to_owned())
+    //         .collect(),
+    // )
+    // .expect("Couldn't write to file for whatever reason");
+
+    (terrain.len() * terrain[0].len()) as u64
+        - terrain
+            .iter()
+            .flatten()
+            .fold(0, |acc, &c| acc + (if c == 'X' { 1 } else { 0 }))
 }
 
 fn main() {
     match filereader::read_file("./day18/resources/input.txt") {
         Ok(lines) => {
-            let result = solve(lines);
+            let result = solve2(lines);
             println!("{:?}", result);
         }
         Err(e) => panic!("{}", e),
