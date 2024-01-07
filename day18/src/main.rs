@@ -97,9 +97,7 @@ fn parse_line_hex(line: String) -> (Direction, u64) {
     unreachable!()
 }
 
-fn solve(lines: Vec<String>) -> u64 {
-    let instructions: Vec<_> = lines.into_iter().map(|line| parse_line(line)).collect();
-
+fn get_total_area_for_instructions(instructions: Vec<(Direction, u64)>) -> u64 {
     let mut points = vec![];
     let mut curr_point = Point::new(0, 0);
 
@@ -116,25 +114,16 @@ fn solve(lines: Vec<String>) -> u64 {
     border_points + inside_area
 }
 
+fn solve(lines: Vec<String>) -> u64 {
+    let instructions: Vec<_> = lines.into_iter().map(|line| parse_line(line)).collect();
+
+    get_total_area_for_instructions(instructions)
+}
+
 fn solve2(lines: Vec<String>) -> u64 {
     let instructions: Vec<_> = lines.into_iter().map(|line| parse_line_hex(line)).collect();
 
-    let mut points = vec![];
-    let mut curr_point = Point::new(0, 0);
-
-    for &(direction, steps) in instructions.iter() {
-        points.push(curr_point);
-        curr_point = curr_point.move_to(direction, steps);
-    }
-
-    points.push(curr_point);
-
-    let border_points = instructions.iter().fold(0, |acc, &(_, count)| acc + count);
-    let inside_area = Point::get_area(points.clone()) - border_points / 2 + 1;
-
-    println!("border: {:?}, area: {:?}", border_points, inside_area);
-
-    border_points + inside_area
+    get_total_area_for_instructions(instructions)
 }
 
 fn main() {
